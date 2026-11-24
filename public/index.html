@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Arena</title>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<style>
+:root {
+  --bg:#101820;
+  --panel:#1b2935;
+  --gold:#e2b45b;
+  --light:#f0d9b5;
+  --dark:#b58863;
+}
+
+* { box-sizing:border-box; }
+
+body {
+  margin:0;
+  background:radial-gradient(circle at top,#243746,#101820 65%);
+  color:white;
+  font-family:Arial,sans-serif;
+}
+
+header {
+  text-align:center;
+  padding:20px 12px 8px;
+}
+
+h1 {
+  color:var(--gold);
+  letter-spacing:2px;
+}
+
+main {
+  max-width:1100px;
+  margin:auto;
+  padding:14px;
+  display:grid;
+  grid-template-columns:minmax(280px,600px) minmax(250px,1fr);
+  gap:18px;
+}
+
+.card {
+  background:var(--panel);
+  border:1px solid #344958;
+  border-radius:16px;
+  padding:16px;
+}
+
+#board {
+  width:100%;
+  aspect-ratio:1;
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  border:5px solid #293b49;
+}
+
+.square {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:clamp(25px,6vw,58px);
+  cursor:pointer;
+  user-select:none;
+}
+
+.square.light { background:var(--light); color:#111; }
+.square.dark { background:var(--dark); color:#111; }
+
+.square.selected {
+  outline:4px solid yellow;
+  outline-offset:-4px;
+}
+
+.square.target:after {
+  content:"";
+  width:23%;
+  height:23%;
+  border-radius:50%;
+  background:#294d38a8;
+}
+
+.piece { line-height:1; }
+
+button {
+  border:0;
+  border
