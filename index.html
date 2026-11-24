@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chess Arena</title>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#101820;--panel:#1b2935;--gold:#e2b45b;--light:#f0d9b5;--dark:#b58863}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#243746,#101820 65%);color:#f5f5f5;font-family:system-ui,Arial,sans-serif}
+header{text-align:center;padding:20px 12px 8px}h1{margin:0;color:var(--gold);letter-spacing:2px;font-size:clamp(25px,5vw,40px)}header p{color:#b8c6d1;margin:5px}
+main{max-width:1100px;margin:auto;padding:14px;display:grid;grid-template-columns:minmax(280px,600px) minmax(250px,1fr);gap:18px}
+.card{background:rgba(27,41,53,.96);border:1px solid #344958;border-radius:16px;padding:16px;box-shadow:0 12px 30px #0005}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.badge{background:#304454;padding:7px 11px;border-radius:20px;font-size:13px;color:#dce7ee}
+#board{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(8,1fr);border:5px solid #293b49;border-radius:6px;overflow:hidden;touch-action:manipulation}
+.square{display:flex;align-items:center;justify-content:center;position:relative;font-size:clamp(25px,6vw,58px);cursor:pointer;user-select:none}
+.square.light{background:var(--light);color:#111}.square.dark{background:var(--dark);color:#111}
+.square.selected{outline:4px solid #f5d76e;outline-offset:-4px}.square.target:after{content:"";width:23%;height:23%;border-radius:50%;background:#294d38a8;position:absolute}
+.square.capture:after{content:"";position:absolute;inset:5px;border:4px solid #b33434;border-radius:50%}
+.piece{line-height:1;text-shadow:0 2px 2px #0003;z-index:1}.files{display:grid;grid-template-columns:repeat(8,1fr);text-align:center;color:#aebdca;font-size:12px;margin-top:5px}
+button{border:0;border-radius:9px;padding:11px 14px;background:var(--gold);color:#17212a;font-weight:700;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+input{width:100%;padding:11px;border-radius:8px;border:1px solid #536777;background:#101820;color:white;margin:6px 0 10px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.muted{color:#aebdca;font-size:14px}.player{padding:10px;border-radius:9px;background:#263947;margin:8px 0;display:flex;justify-content:space-between}
+#qr{background:white;padding:10px;width:max-content;margin:10px auto;border-radius:10px}#qr img{display:block}
+#joinPanel{display:none}#hostPanel{display:none}.history{max-height:210px;overflow:auto;white-space:pre-wrap;background:#101820;padding:10px;border-radius:8px;font-family:monospace;font-size:13px}
+.status{font-weight:700;color:var(--gold)}.center{text-align:center}.winner{font-size:20px;color:#8ee0a2;font-weight:800}
+@media(max-width:760px){main{grid-template-columns:1fr;padding:10px}.card{padding:12px}#board{max-width:600px;margin:auto}}
+</style>
+</head>
+<body>
+<header><h1>♟ CHESS ARENA</h1><p>Two players. One board. Everyone can watch live.</p></header>
+<main>
+<section class="card">
+ <div class="topline"><span class="badge" id="roomBadge">Not connected</span><span class="badge" id="roleBadge">Spectator</span></div>
+ <div class="player"><span>♔ White · <b id="whiteName">Waiting for player</b></span><span id="whiteTurn"></span></div>
+ <div id="board" aria-label="Chess board"></div>
+ <div class="files"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span></div>
+ <div class="player"><span>♚ Black · <b id="blackName">Waiting for player</b></span><span id="blackTurn"></span></div>
+ <p class="status" id="gameStatus">Create an arena or join with a QR code.</p><div class="winner" id="result"></div>
+ <div class="actions"><button id="resetBtn" style="display:none">New game</button><button id="flipBtn">Flip board</button></div>
+</section>
+<aside class="card">
+ <div id="homePanel">
+  <h2>Host a tournament match</h2><p class="muted">Create a room, then show the QR code to both players. You can watch the match on this screen.</p>
+  <button id="createBtn">Create arena + QR</button>
+  <hr style="border-color:#344958;margin:18px 0">
+  <h2>Join an arena</h2><label class="muted">Your display name</label><input id="nameInput" placeholder="Enter your name" maxlength="20"><label class="muted">Room code</label><input id="codeInput" placeholder="6-character code" maxlength="6"><button id="joinBtn">Join match</button>
+ </div>
+ <div id="hostPanel">
+  <h2>Live tournament room</h2><p class="muted">Scan this QR code on two different phones. First entrant gets White, second gets Black. Additional visitors become spectators.</p>
+  <div id="qr"></div><p class="center muted" id="shareUrl"></p><div class="center"><button id="copyBtn">Copy join link</button></div>
+ </div>
+ <div id="joinPanel"><h2>Connected to arena</h2><p id="joinInfo" class="status"></p><p class="muted">Your role is assigned automatically. If you are a player, tap your piece and then its destination square.</p></div>
+ <hr style="border-color:#344958;margin:18px 0">
+ <h3>Match details</h3><p class="muted">Turn: <b id="turnText">—</b></p><p class="muted">Spectators: <b id="spectatorCount">0</b></p><h3>Move history</h3><div class="history" id="history">No moves yet.</div>
+</aside>
+</main>
+<script>
+const socket=io();
+const glyph={wp:"♙",wn:"♘",wb:"♗",wr:"♖",wq:"♕",wk:"♔",bp:"♟",bn:"♞",bb:"♝",br:"♜",bq:"♛",bk:"♚"};
+let role="spectator",roomCode=null,fen="start",selected=null,targets=[],flipped=false,host=false,joinUrl="";
+const $=id=>document.getElementById(id);
+function show(id){$(id).style.display="block"}
+function hide(id){$(id).style.display="none"}
+function boardFromFen(f){const rows=f.split(" ")[0].split("/");let b=[];for(let row of rows){let a=[];for(let c of row){if(+c>0){for(let i=0;i<+c;i++)a.push(null)}else a.push(c)}b.push(a)}return b}
+function render(){
+ const b=boardFromFen(fen),el=$("board");el.innerHTML="";
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  const rr=flipped?7-r:r,cc=flipped?7-c:c,cell=b[rr][cc],sq=String.fromCharCode(97+cc)+(8-rr);
+  const d=document.createElement("div");d.className="square "+((rr+cc)%2===0?"light":"dark");
+  if(selected===sq)d.classList.add("selected");if(targets.includes(sq))d.classList.add(cell?"capture":"target");
+  if(cell){const p=document.createElement("span");p.className="piece";p.textContent=glyph[(cell===cell.toUpperCase()?"w":"b")+cell.toLowerCase()];d.appendChild(p)}
+  d.addEventListener("click",()=>tap(sq));el.appendChild(d);
+ }
+}
+function legalTargets(from){try{const game=new Chess(fen);return game.moves({square:from,verbose:true}).map(m=>m.to)}catch{return []}}
+function tap(sq){
+ if(!["white","black"].includes(role))return;
+ const myColor=role==="white"?"w":"b";let game;try{game=new Chess(fen)}catch{return}
+ if(selected&&targets.includes(sq)){
+  socket.emit("move",{from:selected,to:sq,promotion:"q"},res=>{if(!res.ok)alert(res.error);});
+  selected=null;targets=[];render();return;
+ }
+ const piece=game.get(sq);
+ if(piece&&piece.color===myColor&&game.turn()===myColor){selected=sq;targets=legalTargets(sq)}else{selected=null;targets=[]}
+ render();
+}
+function update(s){
+ fen=s.fen;roomCode=s.code;$("roomBadge").textContent="ROOM "+s.code;
+ $("whiteName").textContent=s.players.w?.name||"Waiting for player";
+ $("blackName").textContent=s.players.b?.name||"Waiting for player";
+ $("spectatorCount").textContent=s.spectators;
+ $("turnText").textContent=s.turn==="w"?"White":"Black";
+ $("whiteTurn").textContent=s.turn==="w"?"●":"";
+ $("blackTurn").textContent=s.turn==="b"?"●":"";
+ $("gameStatus").textContent=s.status;
+ $("result").textContent=s.result;
+ $("history").textContent=s.pgn||"No moves yet.";
+ selected=null;targets=[];render();
+}
+socket.on("state",update);
+$("createBtn").onclick=()=>socket.emit("create-room",{},async res=>{
+ if(!res.ok)return alert("Could not create room");
+ host=true;role="host";roomCode=res.code;update(res.state);hide("homePanel");show("hostPanel");show("resetBtn");
+ const r=await fetch("/api/room/"+roomCode+"/qr");const data=await r.json();joinUrl=data.url;
+ $("qr").innerHTML="";new QRCode($("qr"),{text:joinUrl,width:220,height:220});
+ $("shareUrl").textContent=joinUrl;$("roleBadge").textContent="HOST / SPECTATOR";
+});
+function join(code,name){
+ socket.emit("join-room",{code,name},res=>{
+  if(!res.ok)return alert(res.error);
+  role=res.role;roomCode=code;hide("homePanel");show("joinPanel");
+  $("roleBadge").textContent=role.toUpperCase();$("joinInfo").textContent=role==="spectator"?"You are watching the live match.":`You are playing as ${role.toUpperCase()}.`;
+  update(res.state);
+ });
+}
+$("joinBtn").onclick=()=>{const c=$("codeInput").value.trim().toUpperCase();if(c.length<4)return alert("Enter a valid room code.");join(c,$("nameInput").value.trim()||"Player")};
+$("resetBtn").onclick=()=>{if(confirm("Start a new game?"))socket.emit("reset-game",r=>{if(!r.ok)alert(r.error)})};
+$("flipBtn").onclick=()=>{flipped=!flipped;render()};
+$("copyBtn").onclick=async()=>{try{await navigator.clipboard.writeText(joinUrl);$("copyBtn").textContent="Copied!"}catch{prompt("Copy this link:",joinUrl)}};
+const params=new URLSearchParams(location.search);if(params.get("room")){$("codeInput").value=params.get("room");$("nameInput").value="Player";join(params.get("room"),"Player")}
+</script>
+</body></html>
